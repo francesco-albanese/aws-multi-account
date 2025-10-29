@@ -1,0 +1,18 @@
+# Example terraform.tfvars
+# Copy this file to terraform.tfvars and update with your values
+
+# AWS Region
+aws_region = "eu-west-2"
+
+# Management Account ID (your existing account)
+management_account_id = "781928496898"
+
+# Shared Services Account ID (create this account first in AWS Organizations)
+# Get this from: AWS Organizations > Accounts > shared-services
+shared_services_account_id = "YOUR_SHARED_SERVICES_ACCOUNT_ID"
+
+# Project prefix (used in resource names)
+project_prefix = "francesco-aws"
+
+# External ID for cross-account assume role (security feature)
+external_id = "terraform-state-access"
