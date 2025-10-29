@@ -44,3 +44,5 @@ terraform.rc
 *.tmp
 *.bak
 *.log
+.claude
+plans/

@@ -1,138 +1,211 @@
-# AWS Multi-Account SSO Setup with Terraform
+# AWS Multi-Account SSO with Terraform
 
-Complete guide for setting up AWS multi-account architecture with IAM Identity Center (SSO) using Terraform, with centralized state management and zero-cost encryption.
+**Production-grade AWS multi-account architecture with IAM Identity Center (SSO), following enterprise IaC patterns, with zero monthly cost.**
 
-## Architecture Overview
+[![Terraform](https://img.shields.io/badge/Terraform-1.13.4-623CE4?logo=terraform)](https://www.terraform.io/)
+[![AWS](https://img.shields.io/badge/AWS-Organizations%20%7C%20IAM%20Identity%20Center-FF9900?logo=amazon-aws)](https://aws.amazon.com/)
+[![Cost](https://img.shields.io/badge/Monthly%20Cost-%240-green)](plans/phase-4-validation.md#cost-verification)
+
+---
+
+## What This Does
+
+**Single SSO URL** → **4 AWS Accounts** × **2 Permission Sets** = **8 Access Options**
+
+Login once at `https://d-<id>.awsapps.com/start` to access:
+- **sandbox** (Admin, ReadOnly)
+- **staging** (Admin, ReadOnly)
+- **uat** (Admin, ReadOnly)
+- **production** (Admin, ReadOnly)
+
+**Backend**: Centralized Terraform state in shared-services account (S3 + DynamoDB)
+**Encryption**: SSE-S3 (FREE) not SSE-KMS
+**Cost**: $0/month (100% free tier eligible)
+
+---
+
+## Architecture
 
 ```
-Management Account (francesco-lbn)
-├── IAM Identity Center (SSO)
-├── Users/Groups (awsclifranco in AllowedUsers)
-└── AWS Organizations
-
-Shared-Services Account
-├── S3 Bucket (terraform-state) - SSE-S3 encryption (FREE)
-├── DynamoDB Table (state locking)
-└── IAM Role: terraform-state-access
-
-Member Accounts
-├── sandbox
-├── staging
-├── uat
-└── production
+┌─────────────────────────────────────────────────────────────┐
+│ Management Account (francesco-lbn / 781928496898)          │
+│                                                             │
+│  ┌──────────────────────┐      ┌────────────────────────┐ │
+│  │ AWS Organizations    │      │ IAM Identity Center    │ │
+│  │  ├─ shared-services  │      │  User: awsclifranco    │ │
+│  │  ├─ sandbox          │      │  Group: AllowedUsers   │ │
+│  │  ├─ staging          │      │  Portal: d-<id>.aws... │ │
+│  │  ├─ uat              │      │                        │ │
+│  │  └─ production       │      │  Permission Sets:      │ │
+│  └──────────────────────┘      │   ├─ Admin             │ │
+│                                │   └─ ReadOnly          │ │
+│                                └────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│ Shared-Services Account                                     │
+│                                                             │
+│  ┌──────────────────────────────────────────────────────┐ │
+│  │ Terraform State Infrastructure                       │ │
+│  │  ├─ S3: yourorg-terraform-state-<uuid>               │ │
+│  │  │   └─ SSE-S3 (AES256) FREE encryption             │ │
+│  │  ├─ DynamoDB: yourorg-terraform-locks-<uuid>        │ │
+│  │  └─ IAM Role: terraform-state-access-<uuid>         │ │
+│  │      └─ ExternalId + Management account trust       │ │
+│  └──────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│ Member Accounts (4)                                         │
+│  ├─ sandbox      (111111111111)                            │
+│  ├─ staging      (222222222222)                            │
+│  ├─ uat          (333333333333)                            │
+│  └─ production   (444444444444)                            │
+│                                                             │
+│  Each with: OrganizationAccountAccessRole                  │
+│              SSO Admin + ReadOnly roles                     │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## Prerequisites
+---
 
-- AWS Management Account (you have: francesco-lbn / 781928496898)
-- AWS CLI configured with management account credentials
-- Terraform >= 1.5.0
-- Unique email addresses for each account (5 total)
-
-## Project Structure
+## Project Structure (Org Convention)
 
 ```
 aws-multi-account/
-├── README.md                     # This file
-├── IMPLEMENTATION.md             # Step-by-step guide
-├── state.conf.example           # Backend config template
-├── bootstrap/                    # Phase 0 - Run first
-│   ├── README.md
-│   ├── main.tf
-│   ├── variables.tf
-│   ├── outputs.tf
-│   └── terraform.tfvars.example
-├── organization/                 # Phase 2 - Create accounts
-│   ├── README.md
-│   ├── backend.tf
-│   ├── main.tf
-│   ├── variables.tf
-│   ├── outputs.tf
-│   └── terraform.tfvars.example
-├── identity-center/              # Phase 3 - SSO setup
-│   ├── README.md
-│   ├── backend.tf
-│   ├── main.tf
-│   ├── users.tf
-│   ├── groups.tf
-│   ├── permission-sets.tf
-│   ├── account-assignments.tf
-│   ├── variables.tf
-│   ├── outputs.tf
-│   └── terraform.tfvars.example
-└── docs/
-    ├── sso-cli-setup.md
-    ├── troubleshooting.md
-    └── cost-optimization.md
+├── README.md                          # This filestep-by-step guide
+├── CLAUDE.md                          # Claude Code agent instructions
+├── .gitignore                         # Protects sensitive files
+├── state.conf                         # Generated by Phase 0
+│
+├── plans/                             # Agent-executable phase plans
+│   ├── README.md                     # Execution overview
+│   ├── phase-0-bootstrap.md          # State infrastructure setup
+│   ├── phase-1-foundation.md         # Manual AWS Console config
+│   ├── phase-2-accounts.md           # Member account creation
+│   ├── phase-3-identity.md           # SSO configuration
+│   └── phase-4-validation.md         # Testing & verification
+│
+├── terraform/
+│   ├── environmental/                     # Phase 0: Shared-services state infra
+│   │   ├── main.tf                   # S3, DynamoDB, IAM role
+│   │   ├── providers.tf              # AWS provider + assume_role
+│   │   ├── locals.tf                 # project_short_name, tags
+│   │   ├── terraform.tf              # required_version: 1.13.4
+│   │   ├── data.tf                   # Data sources
+│   │   ├── variables.tf              # Input variables
+│   │   ├── outputs.tf                # Generates state.conf
+│   │   └── terraform.tfvars          # Config values (gitignored)
+│   │
+│   ├── accounts/                      # Phase 2: Member accounts
+│   │   ├── main.tf                   # aws_organizations_account
+│   │   ├── providers.tf              # AWS provider + default_tags
+│   │   ├── locals.tf                 # Account mappings
+│   │   ├── terraform.tf              # Backend S3 + version 1.13.4
+│   │   ├── data.tf                   # Organizations data
+│   │   ├── variables.tf              # Account configs
+│   │   ├── outputs.tf                # Account IDs for Phase 3
+│   │   └── terraform.tfvars          # Config values (gitignored)
+│   │
+│   └── identity-center/               # Phase 3: IAM Identity Center
+│       ├── main.tf                   # High-level orchestration
+│       ├── users.tf                  # aws_identitystore_user
+│       ├── groups.tf                 # aws_identitystore_group
+│       ├── permission-sets.tf        # aws_ssoadmin_permission_set
+│       ├── account-assignments.tf    # aws_ssoadmin_account_assignment
+│       ├── providers.tf              # AWS provider
+│       ├── locals.tf                 # SSO mappings
+│       ├── terraform.tf              # Backend S3 + version 1.13.4
+│       ├── data.tf                   # SSO instance data
+│       ├── variables.tf              # SSO ARNs, account IDs
+│       ├── outputs.tf                # User/group/permission set details
+│       └── terraform.tfvars          # Config values (gitignored)
+│
+└── .claude/
+    └── agents/
+        └── aws-multi-account-architect.md  # Claude Code agent persona
 ```
 
-## Implementation Phases
-
-### Phase 0: Bootstrap (Shared-Services Setup)
-- Create shared-services account
-- Setup S3 + DynamoDB for state
-- Create cross-account IAM role
-- **Cost**: ~$0/month (free tier)
-
-### Phase 1: Foundation (Manual)
-- Enable AWS Organizations (if not already)
-- Enable IAM Identity Center
-- Note SSO portal URL
-
-### Phase 2: Member Accounts
-- Create sandbox/staging/uat/production accounts
-- Configure with Terraform
-- **Cost**: No additional cost
-
-### Phase 3: IAM Identity Center
-- Create users and groups
-- Setup permission sets (Admin, ReadOnly)
-- Assign to accounts
-
-### Phase 4: Testing & Validation
-- Test SSO portal access
-- Configure AWS CLI with SSO
-- Verify cross-account access
-
-## Quick Start
-
-1. Read IMPLEMENTATION.md for detailed steps
-2. Start with Phase 0 (bootstrap/)
-3. Follow phases sequentially
-4. Each phase has its own README.md
+---
 
 ## Key Features
 
-✅ **Zero Cost Encryption**: SSE-S3 (AES256) instead of KMS  
-✅ **Centralized State**: Single S3 bucket for all TF state  
-✅ **Cross-Account Access**: Secure assume role pattern  
-✅ **GitOps Ready**: Can be version controlled and showcased  
-✅ **Best Practices**: Follows AWS Well-Architected Framework  
+### Zero-Cost Architecture
+- ✅ **SSE-S3 Encryption**: FREE (vs SSE-KMS ~$1/month)
+- ✅ **S3 Free Tier**: < 50GB storage (state files ~100KB)
+- ✅ **DynamoDB Free Tier**: PAY_PER_REQUEST model
+- ✅ **IAM Identity Center**: $0 for AWS account assignments
+- ✅ **Total**: $0/month (verified in [Phase 4](plans/phase-4-validation.md#cost-verification))
 
-## State Management
+### Enterprise Patterns
+- ✅ **Org Convention**: terraform.tf, providers.tf, locals.tf, data.tf structure
+- ✅ **Centralized State**: state.conf pattern with assume_role
+- ✅ **Default Tags**: yourorg:terraform_stack, yourorg:environment, yourorg:managed_by
+- ✅ **External ID**: Cross-account security on assume roles
+- ✅ **Terraform 1.13.4**: Production-stable version
 
-All Terraform state stored in shared-services account:
-- Bucket: `yourorg-terraform-state-<uuid>`
-- Region: `eu-west-2`
-- Encryption: SSE-S3 (AES256) - **FREE**
-- Locking: DynamoDB - **FREE tier eligible**
+### Security & Compliance
+- ✅ **Least Privilege**: ReadOnly permission set enforces read-only
+- ✅ **MFA-Ready**: Can enforce MFA on permission sets
+- ✅ **Bucket Versioning**: State history recovery
+- ✅ **Public Access Blocked**: S3 bucket hardened
+- ✅ **GitOps Ready**: Sensitive files gitignored
 
-## Security
+### Production-Ready
+- ✅ **Idempotent**: Re-runnable terraform apply
+- ✅ **Documented**: Each phase has troubleshooting, rollback, verification
 
-- SSE-S3 encryption at rest (FREE)
-- Bucket versioning enabled
-- Public access blocked
-- Cross-account access via IAM roles
-- External ID for additional security
-- MFA can be required (optional)
+---
 
-## Cost Estimate
+## Security Features
 
-- S3 Storage: ~$0.023/GB/month (first 50GB free)
-- S3 Requests: Minimal (free tier covers)
-- DynamoDB: Free tier (25GB, 25 RCU/WCU)
-- **Total**: ~$0-1/month
+### Encryption at Rest
+- S3 bucket: SSE-S3 (AES-256)
+- DynamoDB: Encrypted at rest (default)
+- In-transit: TLS 1.2+
 
-## Next Steps
+### Access Control
+- Cross-account roles with ExternalId
+- Permission sets enforce least privilege
+- ReadOnly boundary prevents writes
+- Admin role for privileged operations
 
-Read `IMPLEMENTATION.md` to begin setup.
+### Compliance-Ready
+- State versioning for audit trail
+- CloudTrail integration (future)
+- AWS Config integration (future)
+- MFA enforcement
+
+### Best Practices
+- No hardcoded credentials
+- Public access blocked on S3
+
+---
+
+## Usage Examples
+
+### Web Access (SSO Portal)
+1. Navigate to `https://d-<id>.awsapps.com/start`
+2. Login as `awsclifranco`
+3. Click **sandbox** → **Admin** → **Management console**
+4. AWS Console opens with admin access
+
+### CLI Access (Programmatic)
+```bash
+# Login to SSO
+aws sso login --profile sandbox-admin
+
+# Verify identity
+aws sts get-caller-identity --profile sandbox-admin
+# Output: sandbox account ID
+
+# Use any AWS service
+aws s3 ls --profile sandbox-admin
+aws ec2 describe-instances --profile sandbox-admin --region eu-west-2
+
+# Switch accounts
+aws sts get-caller-identity --profile production-admin
+# Output: production account ID
+```
