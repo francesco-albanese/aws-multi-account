@@ -159,6 +159,21 @@ aws-multi-account/
 
 ## Usage Examples
 
+Flow:
+- I authenticate to management account (781928496898) with awsclifranco-admin profile.
+- Terraform calls AWS STS AssumeRole API
+- AWS checks if management account is trusted in the terraform role's trust policy.
+- AWS returns temporary credentials (access key, secret key, session token) - valid 1 hour
+- Terraform uses temp credentials to make API calls as if it's in shared-services account
+- After 1 hour, credentials expire - must assume role again
+- 
+Trust Policy (in target account's IAM role):
+{
+  "Principal": {
+    "AWS": "arn:aws:iam::781928496898:root"  # Management account
+  }
+}
+
 ### Web Access (SSO Portal)
 1. Navigate to `https://d-<id>.awsapps.com/start`
 2. Login as `awsclifranco`
