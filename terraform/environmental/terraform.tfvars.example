@@ -1,0 +1,6 @@
+region                     = "eu-west-2"
+management_account_id      = "781928496898"
+shared_services_account_id = "PASTE_FROM_PHASE_MINUS_1_OUTPUT"  # From Phase -1: terraform output shared_services_account_id
+project_prefix             = "franco-aws"
+enable_versioning          = true
+prevent_destroy            = false # Set true for production

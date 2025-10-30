@@ -23,8 +23,6 @@ Temporary Items
 *.tfstate.*
 crash.log
 crash.*.log
-*.tfvars
-*.tfvars.json
 override.tf
 override.tf.json
 *_override.tf
@@ -46,3 +44,11 @@ terraform.rc
 *.log
 .claude
 plans/
+
+# Sensitive outputs
+**/outputs.json
+**/bootstrap-outputs.json
+**/member-accounts.json
+
+# Backup files
+*.backup
