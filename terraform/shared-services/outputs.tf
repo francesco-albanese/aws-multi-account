@@ -21,11 +21,11 @@ output "locks_table_arn" {
 output "state_conf" {
   description = "Backend configuration for subsequent phases (save to ../state.conf)"
   value       = <<-EOT
-bucket         = "${aws_s3_bucket.terraform_state.id}"
-key            = "REPLACE_WITH_PHASE_KEY/terraform.tfstate"
-region         = "${var.region}"
-dynamodb_table = "${aws_dynamodb_table.terraform_locks.id}"
-encrypt        = true
+bucket       = "${aws_s3_bucket.terraform_state.id}"
+key          = "REPLACE_WITH_PHASE_KEY/terraform.tfstate"
+region       = "${var.region}"
+use_lockfile = true
+encrypt      = true
 EOT
 }
 

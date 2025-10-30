@@ -13,8 +13,8 @@ terraform {
   }
 
   # Backend configuration provided via -backend-config=../../state.conf
+  # Key must be unique per environment - passed via -backend-config key=environmental/{env}/terraform.tfstate
   backend "s3" {
-    key = "environmental/terraform.tfstate"
-    # bucket, region, assume_role from -backend-config
+    # bucket, region, key, assume_role from -backend-config
   }
 }
