@@ -1,5 +1,10 @@
-region                = "eu-west-2"
-shared_services_email = "albanesefrancesco.af+shared-services@gmail.com"
-role_name             = "OrganizationAccountAccessRole"
-close_on_deletion     = false # false = suspend only (safe), true = close permanently
-account_name          = "shared-services"
+# AWS Configuration
+region       = "eu-west-2"
+account_id   = "088994864650"
+account_name = "shared-services"
+
+# Project Configuration
+project_prefix = "franco-multi-account-sso"
+
+# S3 State Configuration
+enable_versioning = true

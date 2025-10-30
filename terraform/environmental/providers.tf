@@ -1,20 +1,15 @@
 provider "aws" {
   region = var.region
 
-  # Default provider for management account
-}
-
-provider "aws" {
-  alias  = "shared_services"
-  region = var.region
-
-  assume_role {
-    role_arn     = "arn:aws:iam::${var.shared_services_account_id}:role/OrganizationAccountAccessRole"
-    session_name = "terraform-bootstrap"
+  dynamic "assume_role" {
+    for_each = var.account_id != "" ? [1] : []
+    content {
+      role_arn = "arn:aws:iam::${var.account_id}:role/terraform"
+    }
   }
 
   default_tags {
-    tags =  {
+    tags = {
       "franco:terraform_stack" = "aws-multi-account-sso"
       "franco:managed_by"      = "terraform"
       "franco:environment"     = var.account_name

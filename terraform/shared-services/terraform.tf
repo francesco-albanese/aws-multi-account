@@ -6,8 +6,13 @@ terraform {
       source  = "hashicorp/aws"
       version = ">= 6.18.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = ">= 3.7.2"
+    }
   }
 
-  # No backend block - uses local state
-  # This is Phase -1: account creation before bootstrap
+  backend "s3" {
+    # Backend config provided via -backend-config=../../state.conf
+  }
 }
