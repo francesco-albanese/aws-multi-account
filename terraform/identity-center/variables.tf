@@ -4,11 +4,6 @@ variable "region" {
   default     = "eu-west-2"
 }
 
-variable "project_prefix" {
-  description = "Prefix for resource naming"
-  type        = string
-}
-
 variable "existing_user" {
   description = "Existing SSO user to assign to accounts"
   type = object({
@@ -34,9 +29,4 @@ variable "account_assignments" {
     account_id     = string
     permission_set = string
   }))
-}
-
-variable "account_ids" {
-  description = "Map of environment names to AWS account IDs"
-  type        = map(string)
 }
