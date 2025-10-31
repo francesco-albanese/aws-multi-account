@@ -15,16 +15,46 @@ environmental_ACCOUNT := $(ACCOUNT)
 environmental_FLAGS := -var-file=env/$(ACCOUNT).tfvars
 shared-services-KEY := $(PROJECT_NAME)
 shared-services-ACCOUNT := shared-services
-shared-services_FLAGS := 
+shared-services_FLAGS := -var-file=env/shared-services.tfvars
 
+tf-setup: ## install tfenv and tflint (macOS: use brew install terraform instead)
 tf-setup:
-@if [ ! -d "$$HOME/.tfenv" ]; then git clone https://github.com/tfutils/tfenv.git $$HOME/.tfenv && echo 'export PATH="$$HOME/.tfenv/bin:$$PATH"' >> $$HOME/.zshrc; fi
-@if ! type tflint >/dev/null; then curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash; fi
+	@echo "Installing Terraform tooling..."
+	@if [ "$$(uname)" = "Darwin" ]; then \
+		echo "macOS detected. Recommended: 'brew install terraform tfenv tflint'"; \
+		echo "Attempting tfenv installation for manual PATH setup..."; \
+		if [ ! -d "$$HOME/.tfenv" ]; then \
+			git clone https://github.com/tfutils/tfenv.git $$HOME/.tfenv; \
+			echo "Add to your shell rc: export PATH=\"\$$HOME/.tfenv/bin:\$$PATH\""; \
+		fi; \
+	else \
+		if [ ! -d "$$HOME/.tfenv" ]; then \
+			git clone https://github.com/tfutils/tfenv.git $$HOME/.tfenv && \
+			echo 'export PATH="$$HOME/.tfenv/bin:$$PATH"' >> $$HOME/.bashrc; \
+		fi; \
+		if ! type tflint >/dev/null 2>&1; then \
+			curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash; \
+		fi; \
+	fi
 
-tf-configure: ## swap terraform to correct version using tfenv
-tf-configure: TF_VERSION := $(shell grep required_version $(PWD)/terraform/environmental/terraform.tf | sed -E 's/^.*([0-9]+\.[0-9]+\.[0-9]+).*$$/\1/')
+tf-configure: ## swap terraform to correct version using tfenv (optional)
 tf-configure:
-	@tfenv use $(TF_VERSION)
+	@if command -v tfenv >/dev/null 2>&1; then \
+		TF_VERSION=$$(grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+' $(PWD)/terraform/environmental/terraform.tf | head -n1); \
+		if [ -n "$$TF_VERSION" ]; then \
+			echo "Setting Terraform version to $$TF_VERSION via tfenv..."; \
+			tfenv install $$TF_VERSION 2>/dev/null || true; \
+			tfenv use $$TF_VERSION; \
+		else \
+			echo "Warning: Could not extract Terraform version from terraform.tf"; \
+		fi; \
+	elif command -v terraform >/dev/null 2>&1; then \
+		echo "tfenv not installed, using system terraform:"; \
+		terraform version; \
+	else \
+		echo "Neither tfenv nor terraform found. Run 'make tf-setup' or install terraform."; \
+		exit 1; \
+	fi
 
 clean: ## reset all terraform stacks
 clean: $(addsuffix -clean, $(STACKS))
@@ -57,13 +87,84 @@ apply:
 destroy: ## destroy all terraform stacks
 destroy: $(addsuffix -destroy, $(STACKS))
 
+# Pattern rules for stack-specific operations
+%-clean:
+	@echo "++++ Cleaning $* stack ++++"
+	@rm -rf terraform/$*/.terraform terraform/$*/.terraform.lock.hcl
+
+%-lint:
+	@echo "++++ Linting $* stack ++++"
+	@cd terraform/$* && tflint
+
+%-init:
+	@echo "++++ Initializing $* stack ++++"
+	@if [ -f $(STATE_CONF) ]; then \
+		$(terraform) -chdir=terraform/$* init -backend-config=../../$(STATE_CONF) $($*_FLAGS) $(TF_FLAGS); \
+	else \
+		$(terraform) -chdir=terraform/$* init $($*_FLAGS) $(TF_FLAGS); \
+	fi
+
+%-init-no-backend:
+	@echo "++++ Initializing $* stack (no backend) ++++"
+	@$(terraform) -chdir=terraform/$* init -backend=false $($*_FLAGS) $(TF_FLAGS)
+
+%-validate:
+	@echo "++++ Validating $* stack ++++"
+	@$(terraform) -chdir=terraform/$* validate
+
+%-plan:
+	@echo "++++ Planning $* stack ++++"
+	@$(terraform) -chdir=terraform/$* plan $($*_FLAGS) $(TF_FLAGS)
+
+%-apply:
+	@echo "++++ Applying $* stack ++++"
+	@$(terraform) -chdir=terraform/$* apply $($*_FLAGS) $(TF_FLAGS)
+
+%-destroy:
+	@echo "++++ Destroying $* stack ++++"
+	@$(terraform) -chdir=terraform/$* destroy $($*_FLAGS) $(TF_FLAGS)
+
 .PHONY: fmt
 fmt: ## format all terraform
-	@terraform fmt -recursive terraform/
+	@$(terraform) fmt -recursive terraform/
 
 help: ## show this help message
-	@echo "Available targets:"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s - %s\n", $$1, $$2}'
+	@echo "=========================================="
+	@echo "  AWS Multi-Account Terraform Makefile"
+	@echo "=========================================="
 	@echo ""
-	@echo " Usage:"
-	@echo "    make <target> ACCOUNT=<account_name> AWS_PROFILE=<aws_profile>"
+	@echo "DETECTED STACKS:"
+	@echo "  $(STACKS)"
+	@echo ""
+	@echo "GLOBAL TARGETS:"
+	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | uniq | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[32m%-20s\033[0m %s\n", $$1, $$2}'
+	@echo ""
+	@echo "STACK-SPECIFIC TARGETS:"
+	@echo "  Pattern: make <stack>-<action>"
+	@echo ""
+	@echo "  Available actions:"
+	@echo -e "    \033[33minit\033[0m         - Initialize terraform (with state.conf if exists)"
+	@echo -e "    \033[33mvalidate\033[0m     - Validate terraform configuration"
+	@echo -e "    \033[33mplan\033[0m         - Show execution plan"
+	@echo -e "    \033[33mapply\033[0m        - Apply changes"
+	@echo -e "    \033[33mdestroy\033[0m      - Destroy resources"
+	@echo -e "    \033[33mclean\033[0m        - Remove .terraform/ and lock file"
+	@echo -e "    \033[33mlint\033[0m         - Run tflint"
+	@echo ""
+	@echo "  Examples:"
+	@for stack in $(STACKS); do \
+		echo -e "    \033[36mmake $$stack-init\033[0m"; \
+		echo -e "    \033[36mmake $$stack-plan\033[0m"; \
+		echo -e "    \033[36mmake $$stack-apply\033[0m"; \
+		echo ""; \
+	done
+	@echo "VARIABLES:"
+	@echo "  ACCOUNT=<name>        Target account (default: sandbox)"
+	@echo "  AWS_PROFILE=<profile> AWS profile to use (default: sandbox)"
+	@echo "  TF_FLAGS=<flags>      Additional terraform flags"
+	@echo ""
+	@echo "EXAMPLES:"
+	@echo "  make environmental-plan ACCOUNT=staging AWS_PROFILE=staging"
+	@echo "  make shared-services-apply"
+	@echo "  make init                    # Init all stacks"
+	@echo "  make clean                   # Clean all stacks"
