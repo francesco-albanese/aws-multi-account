@@ -1,13 +1,4 @@
-region         = "eu-west-2"
-project_prefix = "franco-multi-account-sso"
-
-# Account IDs from Phase 2
-account_ids = {
-  sandbox    = "645275603781"
-  staging    = "208318252599"
-  uat        = "393766496546"
-  production = "165835313193"
-}
+region = "eu-west-2"
 
 # Existing SSO user (from Identity Center)
 # This will be imported, not created
