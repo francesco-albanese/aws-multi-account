@@ -1,0 +1,78 @@
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#FFE4E9','primaryTextColor':'#232F3E','primaryBorderColor':'#E7157B','lineColor':'#E65100','secondaryColor':'#E0F7FA','tertiaryColor':'#FFF3E0'}}}%%
+flowchart TB
+    %% User Authentication
+    User([👤 User: awsclifranco])
+
+    %% Management Account
+    subgraph MgmtAccount["🏢 Management Account (781928496898)"]
+        Orgs[AWS Organizations]
+        SSO[IAM Identity Center]
+        TFExec[Terraform Execution]
+    end
+
+    %% AssumeRole Decision
+    Decision{Which Target<br/>Account?}
+
+    %% Shared-Services Account
+    subgraph SharedAccount["☁️ Shared-Services Account (088994864650)"]
+        SharedRole[IAM Role:<br/>terraform]
+        S3[(S3 Bucket<br/>terraform-state)]
+        DDB[(DynamoDB<br/>state-locks)]
+    end
+
+    %% Member Accounts
+    subgraph Members["🌐 Member Accounts"]
+        subgraph Sandbox["Sandbox (645275603781)"]
+            SandboxRole[IAM Role:<br/>terraform]
+        end
+
+        subgraph Staging["Staging (208318252599)"]
+            StagingRole[IAM Role:<br/>terraform]
+        end
+
+        subgraph UAT["UAT (393766496546)"]
+            UATRole[IAM Role:<br/>terraform]
+        end
+
+        subgraph Prod["Production (165835313193)"]
+            ProdRole[IAM Role:<br/>terraform]
+        end
+    end
+
+    %% Authentication Flow
+    User -->|Authenticate| MgmtAccount
+    TFExec -->|Initiate| Decision
+
+    %% AssumeRole Flows
+    Decision -->|Phase 0:<br/>Shared-Services| SharedRole
+    Decision -->|Phase 1:<br/>Sandbox Env| SandboxRole
+    Decision -->|Phase 1:<br/>Staging Env| StagingRole
+    Decision -->|Phase 1:<br/>UAT Env| UATRole
+    Decision -->|Phase 1:<br/>Production Env| ProdRole
+
+    %% State Access (all converge to S3)
+    SharedRole -.->|"State Access<br/>(assume role)"| S3
+    SandboxRole -.->|"State Access<br/>(assume role)"| S3
+    StagingRole -.->|"State Access<br/>(assume role)"| S3
+    UATRole -.->|"State Access<br/>(assume role)"| S3
+    ProdRole -.->|"State Access<br/>(assume role)"| S3
+
+    %% State Locking
+    S3 <-->|Locking| DDB
+
+    %% SSO Assignments
+    SSO -.->|"Admin + ReadOnly<br/>Permission Sets"| Sandbox
+    SSO -.->|"Admin + ReadOnly<br/>Permission Sets"| Staging
+    SSO -.->|"Admin + ReadOnly<br/>Permission Sets"| UAT
+    SSO -.->|"Admin + ReadOnly<br/>Permission Sets"| Prod
+
+    %% Styling
+    classDef mgmtStyle fill:#FFE4E9,stroke:#E7157B,stroke-width:3px,color:#232F3E
+    classDef sharedStyle fill:#E3F2FD,stroke:#1976D2,stroke-width:2px,color:#232F3E
+    classDef memberStyle fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px,color:#232F3E
+    classDef storageStyle fill:#FFF9C4,stroke:#F57C00,stroke-width:2px,color:#232F3E
+
+    class MgmtAccount,Orgs,SSO,TFExec mgmtStyle
+    class SharedAccount,SharedRole sharedStyle
+    class Sandbox,Staging,UAT,Prod,SandboxRole,StagingRole,UATRole,ProdRole memberStyle
+    class S3,DDB storageStyle
