@@ -26,48 +26,12 @@ Login once at `https://d-<id>.awsapps.com/start` to access:
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│ Management Account (francesco-lbn / 781928496898)          │
-│                                                             │
-│  ┌──────────────────────┐      ┌────────────────────────┐ │
-│  │ AWS Organizations    │      │ IAM Identity Center    │ │
-│  │  ├─ shared-services  │      │  User: awsclifranco    │ │
-│  │  ├─ sandbox          │      │  Group: AllowedUsers   │ │
-│  │  ├─ staging          │      │  Portal: d-<id>.aws... │ │
-│  │  ├─ uat              │      │                        │ │
-│  │  └─ production       │      │  Permission Sets:      │ │
-│  └──────────────────────┘      │   ├─ Admin             │ │
-│                                │   └─ ReadOnly          │ │
-│                                └────────────────────────┘ │
-└─────────────────────────────────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│ Shared-Services Account                                     │
-│                                                             │
-│  ┌──────────────────────────────────────────────────────┐ │
-│  │ Terraform State Infrastructure                       │ │
-│  │  ├─ S3: yourorg-terraform-state-<uuid>               │ │
-│  │  │   └─ SSE-S3 (AES256) FREE encryption             │ │
-│  │  ├─ DynamoDB: yourorg-terraform-locks-<uuid>        │ │
-│  │  └─ IAM Role: terraform-state-access-<uuid>         │ │
-│  │      └─ ExternalId + Management account trust       │ │
-│  └──────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│ Member Accounts (4)                                         │
-│  ├─ sandbox      (111111111111)                            │
-│  ├─ staging      (222222222222)                            │
-│  ├─ uat          (333333333333)                            │
-│  └─ production   (444444444444)                            │
-│                                                             │
-│  Each with: OrganizationAccountAccessRole                  │
-│              SSO Admin + ReadOnly roles                     │
-└─────────────────────────────────────────────────────────────┘
-```
+![AWS Multi-Account Architecture](diagrams/aws-multi-account-architecture.drawio.png)
+
+**Diagrams available in [`diagrams/`](diagrams/)**:
+- `aws-multi-account-architecture.drawio.png` - Visual diagram
+- `aws-multi-account-architecture.drawio.xml` - Editable (draw.io)
+- `aws-multi-account-flow.mmd` - Mermaid text-based flow
 
 ---
 
