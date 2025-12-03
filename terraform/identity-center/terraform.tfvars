@@ -37,6 +37,15 @@ account_assignments = [
     account_id     = "645275603781"
     permission_set = "ReadOnly"
   },
+  # Shared Services
+  {
+    account_id     = "088994864650"
+    permission_set = "Admin"
+  },
+  {
+    account_id     = "088994864650"
+    permission_set = "ReadOnly"
+  },
   # Staging
   {
     account_id     = "208318252599"
